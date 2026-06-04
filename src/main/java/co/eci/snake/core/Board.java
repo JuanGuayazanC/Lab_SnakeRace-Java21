@@ -2,6 +2,7 @@ package co.eci.snake.core;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -16,7 +17,7 @@ public final class Board {
   private final Set<Position> turbo = new HashSet<>();
   private final Map<Position, Position> teleports = new HashMap<>();
 
-  public enum MoveResult { MOVED, ATE_MOUSE, HIT_OBSTACLE, ATE_TURBO, TELEPORTED }
+  public enum MoveResult { MOVED, ATE_MOUSE, HIT_OBSTACLE, ATE_TURBO, TELEPORTED, DIED }
 
   public Board(int width, int height) {
     if (width <= 0 || height <= 0) throw new IllegalArgumentException("Board dimensions must be positive");
@@ -36,13 +37,30 @@ public final class Board {
   public synchronized Set<Position> turbo() { return new HashSet<>(turbo); }
   public synchronized Map<Position, Position> teleports() { return new HashMap<>(teleports); }
 
-  public synchronized MoveResult step(Snake snake) {
+  public synchronized MoveResult step(Snake snake, List<Snake> allSnakes) {
     Objects.requireNonNull(snake, "snake");
     var head = snake.head();
     var dir = snake.direction();
     Position next = new Position(head.x() + dir.dx, head.y() + dir.dy).wrap(width, height);
 
     if (obstacles.contains(next)) return MoveResult.HIT_OBSTACLE;
+
+    // Auto-colisión: la cabeza entra en el propio cuerpo.
+    if (snake.containsPosition(next)) {
+      snake.kill();
+      return MoveResult.DIED;
+    }
+
+    // Colisión cruzada: la cabeza entra en el cuerpo de otra serpiente viva.
+    // board.step() es synchronized en Board → solo un runner a la vez puede
+    // estar aquí, así que adquirir varios monitores de Snake es seguro (no hay
+    // dos hilos compitiendo por ellos simultáneamente desde dentro de step()).
+    for (Snake other : allSnakes) {
+      if (other != snake && other.isAlive() && other.containsPosition(next)) {
+        snake.kill();
+        return MoveResult.DIED;
+      }
+    }
 
     boolean teleported = false;
     if (teleports.containsKey(next)) {
