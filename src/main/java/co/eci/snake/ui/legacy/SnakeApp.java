@@ -1,5 +1,6 @@
 package co.eci.snake.ui.legacy;
 
+import co.eci.snake.concurrency.PauseBarrier;
 import co.eci.snake.concurrency.SnakeRunner;
 import co.eci.snake.core.Board;
 import co.eci.snake.core.Direction;
@@ -10,6 +11,7 @@ import co.eci.snake.core.engine.GameClock;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -19,8 +21,10 @@ public final class SnakeApp extends JFrame {
   private final Board board;
   private final GamePanel gamePanel;
   private final JButton actionButton;
+  private final JLabel statsLabel;        // muestra estadísticas al pausar
   private final GameClock clock;
   private final java.util.List<Snake> snakes = new java.util.ArrayList<>();
+  private final PauseBarrier barrier = new PauseBarrier(); // inicia pausada
 
   public SnakeApp() {
     super("The Snake Race");
@@ -35,11 +39,18 @@ public final class SnakeApp extends JFrame {
     }
 
     this.gamePanel = new GamePanel(board, () -> snakes);
-    this.actionButton = new JButton("Action");
+    this.actionButton = new JButton("Iniciar"); // antes "Action"; ahora inicia detenido
+    this.statsLabel = new JLabel(" ");
+    statsLabel.setHorizontalAlignment(SwingConstants.CENTER);
+
+    // Panel inferior: botón arriba, estadísticas abajo
+    JPanel bottomPanel = new JPanel(new BorderLayout());
+    bottomPanel.add(actionButton, BorderLayout.NORTH);
+    bottomPanel.add(statsLabel, BorderLayout.SOUTH);
 
     setLayout(new BorderLayout());
     add(gamePanel, BorderLayout.CENTER);
-    add(actionButton, BorderLayout.SOUTH);
+    add(bottomPanel, BorderLayout.SOUTH);
 
     setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     pack();
@@ -47,8 +58,9 @@ public final class SnakeApp extends JFrame {
 
     this.clock = new GameClock(60, () -> SwingUtilities.invokeLater(gamePanel::repaint));
 
+    // Los runners se inician aquí pero bloquean inmediatamente en barrier.awaitUnpaused()
     var exec = Executors.newVirtualThreadPerTaskExecutor();
-    snakes.forEach(s -> exec.submit(new SnakeRunner(s, board)));
+    snakes.forEach(s -> exec.submit(new SnakeRunner(s, board, barrier, snakes)));
 
     actionButton.addActionListener((ActionEvent e) -> togglePause());
 
@@ -125,17 +137,62 @@ public final class SnakeApp extends JFrame {
     }
 
     setVisible(true);
-    clock.start();
+    // clock.start() ya NO va aquí: el juego arranca solo al presionar "Iniciar"
   }
 
+  // CORRECCIÓN: togglePause() ahora maneja 3 estados en lugar de 2.
+  // Antes: "Action" ↔ "Resume" (solo pausaba el repaint, no los runners).
+  // Ahora: "Iniciar" → "Pausar" → "Reanudar" → "Pausar" ...
   private void togglePause() {
-    if ("Action".equals(actionButton.getText())) {
-      actionButton.setText("Resume");
-      clock.pause();
+    if ("Iniciar".equals(actionButton.getText())) {
+      barrier.resume();        // desbloquea todos los SnakeRunner (notifyAll)
+      clock.start();           // arranca el scheduler de repaint
+      actionButton.setText("Pausar");
+      statsLabel.setText(" ");
+    } else if ("Pausar".equals(actionButton.getText())) {
+      barrier.pause();         // runners terminarán su step() y bloquearán con wait()
+      clock.pause();           // detiene el repaint
+      updateStats();           // muestra estadísticas de forma consistente
+      actionButton.setText("Reanudar");
     } else {
-      actionButton.setText("Action");
-      clock.resume();
+      statsLabel.setText(" ");
+      barrier.resume();        // notifyAll → runners continúan
+      clock.resume();          // reanuda el repaint
+      actionButton.setText("Pausar");
     }
+  }
+
+  // Muestra la serpiente viva más larga y la primera en morir.
+  // Los métodos de Snake son synchronized → lectura consistente aunque algún
+  // runner no haya bloqueado todavía (el step es brevísimo, sin tearing visible).
+  private void updateStats() {
+    Snake longestAlive = snakes.stream()
+        .filter(Snake::isAlive)
+        .max(Comparator.comparingInt(Snake::currentLength))
+        .orElse(null);
+
+    Snake firstDead = snakes.stream()
+        .filter(s -> !s.isAlive())
+        .min(Comparator.comparingLong(Snake::diedAt))
+        .orElse(null);
+
+    StringBuilder sb = new StringBuilder("[ PAUSADO ]  ");
+    if (longestAlive != null) {
+      sb.append("Más larga viva: Serpiente #")
+        .append(snakes.indexOf(longestAlive))
+        .append(" (").append(longestAlive.currentLength()).append(" seg)");
+    } else {
+      sb.append("Ninguna serpiente viva");
+    }
+    sb.append("   |   ");
+    if (firstDead != null) {
+      sb.append("Primera en morir: Serpiente #")
+        .append(snakes.indexOf(firstDead))
+        .append(" (max ").append(firstDead.peakLength()).append(" seg)");
+    } else {
+      sb.append("Ninguna ha muerto aún");
+    }
+    statsLabel.setText(sb.toString());
   }
 
   public static final class GamePanel extends JPanel {
@@ -213,6 +270,7 @@ public final class SnakeApp extends JFrame {
       var snakes = snakesSupplier.get();
       int idx = 0;
       for (Snake s : snakes) {
+        if (!s.isAlive()) { idx++; continue; } // serpientes muertas no se dibujan
         var body = s.snapshot().toArray(new Position[0]);
         for (int i = 0; i < body.length; i++) {
           var p = body[i];
