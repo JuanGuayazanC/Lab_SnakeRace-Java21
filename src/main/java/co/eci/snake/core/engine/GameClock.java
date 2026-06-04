@@ -9,14 +9,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Reloj del juego que dispara un {@code tick} periódico para redibujar la pantalla.
+ * Game clock that fires a periodic {@code tick} to repaint the screen.
  *
- * <p>Internamente usa un {@link ScheduledExecutorService} de un solo hilo.
- * El estado ({@link GameState}) se gestiona con un {@link AtomicReference}
- * para evitar condiciones de carrera al pausar/reanudar desde el EDT.</p>
+ * <p>Internally uses a single-thread {@link ScheduledExecutorService}.
+ * State ({@link GameState}) is managed with an {@link AtomicReference}
+ * to avoid race conditions when pausing/resuming from the EDT.</p>
  *
- * <p><b>Nota:</b> este reloj controla únicamente el repaint de la UI.
- * La pausa real de los {@code SnakeRunner} la gestiona {@code PauseBarrier}.</p>
+ * <p><b>Note:</b> this clock only controls UI repainting.
+ * The actual pause of the {@code SnakeRunner} threads is handled by
+ * {@code PauseBarrier}.</p>
  *
  * @author Juan Sebastian Guayazan Edilberto
  */
@@ -28,12 +29,12 @@ public final class GameClock implements AutoCloseable {
   private final AtomicReference<GameState> state = new AtomicReference<>(GameState.STOPPED);
 
   /**
-   * Crea el reloj con el período y la acción indicados.
+   * Creates the clock with the given period and tick action.
    *
-   * @param periodMillis intervalo entre ticks en milisegundos (debe ser &gt; 0)
-   * @param tick         acción a ejecutar en cada tick (normalmente un repaint)
-   * @throws IllegalArgumentException si {@code periodMillis} es ≤ 0
-   * @throws NullPointerException     si {@code tick} es {@code null}
+   * @param periodMillis interval between ticks in milliseconds (must be &gt; 0)
+   * @param tick         action to execute on each tick (typically a repaint)
+   * @throws IllegalArgumentException if {@code periodMillis} is ≤ 0
+   * @throws NullPointerException     if {@code tick} is {@code null}
    */
   public GameClock(long periodMillis, Runnable tick) {
     if (periodMillis <= 0) throw new IllegalArgumentException("periodMillis must be > 0");
@@ -42,8 +43,8 @@ public final class GameClock implements AutoCloseable {
   }
 
   /**
-   * Arranca el scheduler. Solo tiene efecto la primera vez (estado STOPPED → RUNNING).
-   * Llamadas posteriores son ignoradas.
+   * Starts the scheduler. Only takes effect the first time (STOPPED → RUNNING).
+   * Subsequent calls are ignored.
    */
   public void start() {
     if (state.compareAndSet(GameState.STOPPED, GameState.RUNNING)) {
@@ -54,22 +55,22 @@ public final class GameClock implements AutoCloseable {
   }
 
   /**
-   * Pausa el reloj: el scheduler sigue activo pero el tick no se ejecuta.
+   * Pauses the clock: the scheduler keeps running but the tick is not executed.
    */
   public void pause()  { state.set(GameState.PAUSED); }
 
   /**
-   * Reanuda el reloj después de una pausa.
+   * Resumes the clock after a pause.
    */
   public void resume() { state.set(GameState.RUNNING); }
 
   /**
-   * Detiene el reloj (sin cerrar el scheduler).
+   * Stops the clock (without shutting down the scheduler).
    */
   public void stop()   { state.set(GameState.STOPPED); }
 
   /**
-   * Libera el scheduler. Debe llamarse al cerrar la aplicación.
+   * Shuts down the scheduler. Should be called when the application closes.
    */
   @Override
   public void close()  { scheduler.shutdownNow(); }

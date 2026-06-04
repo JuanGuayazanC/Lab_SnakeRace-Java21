@@ -8,22 +8,22 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Runnable que gobierna el movimiento autónomo de una serpiente.
+ * Runnable that governs the autonomous movement of a snake.
  *
- * <p>Cada instancia se ejecuta en su propio <em>virtual thread</em> de Java 21.
- * El bucle principal realiza estos pasos en cada iteración:</p>
+ * <p>Each instance runs in its own Java 21 <em>virtual thread</em>.
+ * The main loop performs these steps on each iteration:</p>
  * <ol>
- *   <li>Bloquear en {@link PauseBarrier#awaitUnpaused()} si el juego está pausado
- *       (sin busy-wait: el hilo duerme con {@code wait()}).</li>
- *   <li>Girar aleatoriamente con probabilidad 10 % (5 % en turbo).</li>
- *   <li>Pedir al tablero que calcule y aplique el siguiente paso.</li>
- *   <li>Reaccionar al resultado: girar en obstáculo, activar turbo, o terminar al morir.</li>
- *   <li>Dormir {@code baseSleepMs} ms (o {@code turboSleepMs} ms en modo turbo).</li>
+ *   <li>Block on {@link PauseBarrier#awaitUnpaused()} if the game is paused
+ *       (no busy-wait: the thread sleeps with {@code wait()}).</li>
+ *   <li>Randomly turn with 10% probability (5% in turbo mode).</li>
+ *   <li>Ask the board to compute and apply the next step.</li>
+ *   <li>React to the result: turn on obstacle, activate turbo, or stop on death.</li>
+ *   <li>Sleep {@code baseSleepMs} ms (or {@code turboSleepMs} ms in turbo mode).</li>
  * </ol>
  *
- * <p><b>Corrección aplicada:</b> el código original no consultaba el estado de pausa;
- * los runners seguían moviéndose aunque el reloj de repaint estuviera detenido.
- * Ahora {@link PauseBarrier#awaitUnpaused()} garantiza la suspensión real.</p>
+ * <p><b>Fix applied:</b> the original code did not check the pause state;
+ * runners kept moving even when the repaint clock was stopped.
+ * Now {@link PauseBarrier#awaitUnpaused()} guarantees real suspension.</p>
  *
  * @author Juan Sebastian Guayazan Edilberto
  */
@@ -33,25 +33,25 @@ public final class SnakeRunner implements Runnable {
   private final Board        board;
   private final PauseBarrier barrier;
 
-  /** Lista de todas las serpientes; necesaria para la detección de colisión cruzada. */
+  /** Full snake list; needed for cross-collision detection. */
   private final List<Snake>  allSnakes;
 
-  /** Milisegundos de pausa entre pasos en velocidad normal. */
+  /** Milliseconds to wait between steps at normal speed. */
   private final int baseSleepMs  = 80;
 
-  /** Milisegundos de pausa entre pasos en modo turbo. */
+  /** Milliseconds to wait between steps in turbo mode. */
   private final int turboSleepMs = 40;
 
-  /** Ticks restantes de modo turbo (0 = sin turbo). */
+  /** Remaining turbo ticks (0 = no turbo). */
   private int turboTicks = 0;
 
   /**
-   * Crea un runner para la serpiente indicada.
+   * Creates a runner for the given snake.
    *
-   * @param snake     serpiente que controlará este runner
-   * @param board     tablero compartido donde se calcula cada paso
-   * @param barrier   barrera de pausa compartida entre todos los runners
-   * @param allSnakes lista de todas las serpientes (para colisión cruzada)
+   * @param snake     snake this runner will control
+   * @param board     shared board where each step is computed
+   * @param barrier   pause barrier shared across all runners
+   * @param allSnakes list of all snakes (for cross-collision detection)
    */
   public SnakeRunner(Snake snake, Board board, PauseBarrier barrier, List<Snake> allSnakes) {
     this.snake     = snake;
@@ -61,18 +61,17 @@ public final class SnakeRunner implements Runnable {
   }
 
   /**
-   * Bucle principal del runner. Se ejecuta hasta que el hilo sea interrumpido
-   * o la serpiente muera.
+   * Main runner loop. Runs until the thread is interrupted or the snake dies.
    */
   @Override
   public void run() {
     try {
       while (!Thread.currentThread().isInterrupted() && snake.isAlive()) {
 
-        // Bloquea con wait() mientras el juego esté pausado (sin busy-wait).
+        // Block with wait() while the game is paused (no busy-wait).
         barrier.awaitUnpaused();
 
-        // Verificación post-espera: pudo morir mientras estaba bloqueada.
+        // Post-wait check: the snake may have died while blocked.
         if (!snake.isAlive()) break;
 
         maybeTurn();
@@ -83,7 +82,7 @@ public final class SnakeRunner implements Runnable {
         } else if (res == Board.MoveResult.ATE_TURBO) {
           turboTicks = 100;
         } else if (res == Board.MoveResult.DIED) {
-          return; // serpiente muerta → el runner termina limpiamente
+          return; // snake dead → runner exits cleanly
         }
 
         int sleep = (turboTicks > 0) ? turboSleepMs : baseSleepMs;
@@ -96,8 +95,8 @@ public final class SnakeRunner implements Runnable {
   }
 
   /**
-   * Con probabilidad {@code p}, gira la serpiente en una dirección aleatoria.
-   * La probabilidad se reduce en modo turbo para que la serpiente vaya más recto.
+   * With probability {@code p}, turns the snake in a random direction.
+   * The probability is lower in turbo mode so the snake travels straighter.
    */
   private void maybeTurn() {
     double p = (turboTicks > 0) ? 0.05 : 0.10;
@@ -105,8 +104,8 @@ public final class SnakeRunner implements Runnable {
   }
 
   /**
-   * Gira la serpiente en una dirección aleatoria entre las cuatro posibles.
-   * El método {@link Snake#turn} ignorará el giro si es un giro de 180°.
+   * Turns the snake in a random direction among the four possible ones.
+   * {@link Snake#turn} will ignore the turn if it is a 180° reversal.
    */
   private void randomTurn() {
     var dirs = Direction.values();

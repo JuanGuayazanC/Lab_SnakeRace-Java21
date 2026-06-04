@@ -1,117 +1,118 @@
-# Snake Race — Laboratorio 2 (Java 21, Virtual Threads)
-Juego de carreras de serpientes donde cada serpiente corre de forma autónoma en su propio hilo. El objetivo del laboratorio es identificar y corregir condiciones de carrera, colecciones inseguras y esperas activas en un programa multihilo, usando mecanismos de sincronización de Java 21.
+# Snake Race — Lab 2 (Java 21, Virtual Threads)
+
+A snake racing game where each snake runs autonomously in its own thread. The goal of this lab is to identify and fix race conditions, unsafe collections, and busy-waiting in a multithreaded program using Java 21 synchronization mechanisms.
 
 ## Author
 
-JUAN SEBASTIÁN GUAYAZÁN CLAVIJO  
-Software Architectures (ISIS ARSW - 101)  
+JUAN SEBASTIÁN GUAYAZÁN CLAVIJO
+Software Architectures (ISIS ARSW - 101)
 Dean's Office of Systems Engineering
-Systems Engineering  
-Colombian School of Engineering Julio Garavito  
+Systems Engineering
+Colombian School of Engineering Julio Garavito
 2026-i
 
 ---
 
-## Requisitos
+## Requirements
 
-- **JDK 21** (Temurin recomendado)
+- **JDK 21** (Temurin recommended)
 - **Maven 3.9+**
-- SO: Windows, macOS o Linux
+- OS: Windows, macOS or Linux
 
 ---
 
-## Cómo ejecutar
+## How to run
 
 ```bash
-# Compilar y verificar
+# Compile and verify
 mvn clean verify
 
-# Ejecutar con N serpientes (por defecto 2)
+# Run with N snakes (default 2)
 mvn -q -DskipTests exec:java -Dsnakes=4
 
-# Prueba de robustez con carga alta
+# High-load robustness test
 mvn -q -DskipTests exec:java -Dsnakes=20
 ```
 
-**Controles:**
-| Tecla | Acción |
+**Controls:**
+| Key | Action |
 |---|---|
-| `Iniciar` (botón) | Arranca el juego |
-| `Pausar` / `Reanudar` (botón) | Pausa y reanuda |
-| `Espacio` | Igual que el botón |
-| Flechas `← ↑ → ↓` | Controla la serpiente #0 |
-| `W A S D` | Controla la serpiente #1 |
+| `Start` (button) | Starts the game |
+| `Pause` / `Resume` (button) | Pauses and resumes |
+| `Space` | Same as the button |
+| Arrow keys `← ↑ → ↓` | Controls snake #0 |
+| `W A S D` | Controls snake #1 |
 
 ---
 
-## Arquitectura del proyecto
+## Project architecture
 
 ```
 co.eci.snake
 ├── app/
-│   └── Main.java                  → Punto de entrada; lanza SnakeApp
+│   └── Main.java                  → Entry point; launches SnakeApp
 │
 ├── core/
-│   ├── Board.java                 → Tablero: ratones, obstáculos, turbo, teleports
-│   ├── Snake.java                 → Cuerpo de la serpiente (deque de posiciones)
+│   ├── Board.java                 → Board: mice, obstacles, turbo, teleports
+│   ├── Snake.java                 → Snake body (deque of positions)
 │   ├── Direction.java             → Enum: UP, DOWN, LEFT, RIGHT
-│   ├── Position.java              → Coordenada (x, y) con wrap-around
+│   ├── Position.java              → Coordinate (x, y) with wrap-around
 │   ├── GameState.java             → Enum: STOPPED, RUNNING, PAUSED
 │   └── engine/
-│       └── GameClock.java         → Scheduler de repaint (pausa/reanuda la UI)
+│       └── GameClock.java         → Repaint scheduler (pauses/resumes the UI)
 │
 ├── concurrency/
-│   ├── PauseBarrier.java          → [NUEVO] Barrera wait/notify para pausar runners
-│   └── SnakeRunner.java           → Runnable de cada serpiente (un virtual thread cada una)
+│   ├── PauseBarrier.java          → [NEW] wait/notify barrier to pause runners
+│   └── SnakeRunner.java           → Runnable for each snake (one virtual thread each)
 │
 └── ui/legacy/
-    └── SnakeApp.java              → Ventana Swing: tablero, botón, estadísticas
+    └── SnakeApp.java              → Swing window: board, button, statistics
 ```
 
-### Flujo de ejecución
+### Execution flow
 
 ```
 main()
   └─ SnakeApp()
-       ├─ Crea Board (35×28) con ratones, obstáculos, turbo y teleports
-       ├─ Crea N objetos Snake
-       ├─ Crea PauseBarrier (inicia en estado pausado)
-       ├─ Lanza N SnakeRunner en virtual threads → todos bloquean en barrier.awaitUnpaused()
-       └─ Muestra ventana con botón "Iniciar"
+       ├─ Creates Board (35×28) with mice, obstacles, turbo and teleports
+       ├─ Creates N Snake objects
+       ├─ Creates PauseBarrier (starts in paused state)
+       ├─ Launches N SnakeRunners in virtual threads → all block on barrier.awaitUnpaused()
+       └─ Shows window with "Start" button
 
-Al presionar "Iniciar"
-  └─ barrier.resume()  →  notifyAll() desbloquea todos los runners
-  └─ clock.start()     →  repaint cada 60 ms
+On "Start" press
+  └─ barrier.resume()  →  notifyAll() unblocks all runners
+  └─ clock.start()     →  repaint every 60 ms
 
-Cada SnakeRunner (bucle):
-  1. barrier.awaitUnpaused()  →  bloquea aquí si está pausado
-  2. maybeTurn()              →  giro aleatorio con probabilidad 10 %
-  3. board.step(snake, allSnakes)  →  calcula y aplica el movimiento
-  4. Thread.sleep(80 ms)      →  velocidad base (40 ms en turbo)
+Each SnakeRunner (loop):
+  1. barrier.awaitUnpaused()       →  blocks here if paused
+  2. maybeTurn()                   →  random turn with 10% probability
+  3. board.step(snake, allSnakes)  →  computes and applies the move
+  4. Thread.sleep(80 ms)           →  base speed (40 ms in turbo mode)
 ```
 
 ---
 
-## Reglas del juego
+## Game rules
 
-| Elemento | Efecto |
+| Element | Effect |
 |---|---|
-| Ratón (círculo negro) | La serpiente crece; aparece un nuevo obstáculo |
-| Obstáculo (naranja) | Rebote: giro aleatorio, no mata |
-| Teleport (flecha roja) | La serpiente sale por el portal par |
-| Turbo (rayo) | Duplica la velocidad por 100 ticks |
-| Cuerpo propio | Auto-colisión → muere |
-| Cuerpo de otra serpiente | Colisión cruzada → muere |
+| Mouse (black circle) | Snake grows; a new obstacle appears |
+| Obstacle (orange) | Bounce: random turn, does not kill |
+| Teleport (red arrow) | Snake exits through the paired portal |
+| Turbo (lightning bolt) | Doubles speed for 100 ticks |
+| Own body | Self-collision → dies |
+| Another snake's body | Cross-collision → dies |
 
 ---
 
-## Conceptos del laboratorio
+## Lab concepts
 
-### Hilo (Thread)
+### Thread
 
-Un hilo es la unidad mínima de ejecución dentro de un proceso. Varios hilos comparten el mismo espacio de memoria (variables, objetos), lo que los hace eficientes pero también propensos a conflictos cuando acceden a los mismos datos al mismo tiempo.
+A thread is the smallest unit of execution within a process. Multiple threads share the same memory space (variables, objects), making them efficient but prone to conflicts when accessing the same data simultaneously.
 
-En este proyecto cada serpiente corre en su propio hilo, creado con la API de **virtual threads** de Java 21:
+In this project each snake runs in its own thread, created with the Java 21 **virtual threads** API:
 ```java
 var exec = Executors.newVirtualThreadPerTaskExecutor();
 snakes.forEach(s -> exec.submit(new SnakeRunner(s, board, barrier, snakes)));
@@ -119,189 +120,189 @@ snakes.forEach(s -> exec.submit(new SnakeRunner(s, board, barrier, snakes)));
 
 ### Virtual Threads (Java 21)
 
-Los virtual threads son hilos ligeros gestionados por la JVM en lugar del sistema operativo. A diferencia de los hilos del SO (platform threads), se pueden crear miles sin problema de memoria. Son ideales para tareas que pasan mucho tiempo esperando (I/O, `sleep`), como es el caso de los `SnakeRunner` que duermen 80 ms entre cada paso.
+Virtual threads are lightweight threads managed by the JVM instead of the operating system. Unlike OS threads (platform threads), thousands can be created without memory issues. They are ideal for tasks that spend most of their time waiting (I/O, `sleep`), such as the `SnakeRunner` instances that sleep 80 ms between each step.
 
-### Condición de carrera (Race Condition)
+### Race Condition
 
-Ocurre cuando dos o más hilos acceden a un dato compartido y el resultado depende del orden en que se ejecutan. No es determinista: el programa puede funcionar bien la mayoría de las veces y fallar de forma impredecible.
+Occurs when two or more threads access shared data and the result depends on the order in which they execute. It is non-deterministic: the program may work correctly most of the time and fail unpredictably.
 
-**Ejemplo en este proyecto:** el `SnakeRunner` escribe en `body` (vía `advance()`) mientras el EDT de Swing lo lee (vía `snapshot()`). Si el SO interrumpe el runner a mitad de la escritura y el EDT entra a leer, puede encontrar el `ArrayDeque` en un estado inconsistente → `ConcurrentModificationException`.
+**Example in this project:** the `SnakeRunner` writes to `body` (via `advance()`) while the Swing EDT reads it (via `snapshot()`) in `paintComponent()`. If the OS interrupts the runner mid-write and the EDT enters to read, it may find the `ArrayDeque` in an inconsistent state → `ConcurrentModificationException`.
 
-### Región crítica
+### Critical Section
 
-Es la sección de código que accede a un recurso compartido y que solo debe ejecutarse por **un hilo a la vez**. La clave es que la región crítica debe ser lo más pequeña posible: proteger más de lo necesario reduce el paralelismo sin beneficio.
+The section of code that accesses a shared resource and must only be executed by **one thread at a time**. The key is to keep the critical section as small as possible: protecting more than necessary reduces parallelism without benefit.
 
-**Ejemplo en este proyecto:** dentro de `board.step()` se modifican `mice`, `obstacles`, `turbo` y `teleports`. Toda esa lógica es la región crítica protegida por el monitor del `Board`.
+**Example in this project:** inside `board.step()`, `mice`, `obstacles`, `turbo` and `teleports` are modified. All that logic is the critical section protected by the `Board` monitor.
 
-### Monitor y `synchronized`
+### Monitor and `synchronized`
 
-Java implementa el patrón **monitor** con la palabra clave `synchronized`. Cuando un método es `synchronized`, solo un hilo puede ejecutarlo a la vez sobre el mismo objeto. Los demás hilos que intenten entrar quedan bloqueados hasta que el primero salga.
+Java implements the **monitor** pattern with the `synchronized` keyword. When a method is `synchronized`, only one thread can execute it at a time on the same object. Other threads that try to enter are blocked until the first one exits.
 
 ```java
-// Solo un hilo a la vez puede ejecutar step() sobre el mismo Board
+// Only one thread at a time can execute step() on the same Board
 public synchronized MoveResult step(Snake snake, List<Snake> allSnakes) { ... }
 ```
 
-El objeto que actúa como llave se llama **monitor** o **lock**. En métodos de instancia `synchronized`, el monitor es `this`.
+The object acting as the key is called the **monitor** or **lock**. In `synchronized` instance methods, the monitor is `this`.
 
 ### `volatile`
 
-La palabra clave `volatile` garantiza que cuando un hilo escribe una variable, el nuevo valor sea inmediatamente visible para todos los demás hilos (sin caché de CPU). Es más ligero que `synchronized` pero **solo es suficiente para lecturas y escrituras simples**. No protege operaciones compuestas como read-check-write.
+The `volatile` keyword guarantees that when a thread writes a variable, the new value is immediately visible to all other threads (bypassing CPU cache). It is lighter than `synchronized` but **only sufficient for simple reads and writes**. It does not protect compound operations like read-check-write.
 
 ```java
-private volatile boolean alive = true; // lectura/escritura simple → volatile es suficiente
-private volatile Direction direction;  // pero turn() es compound → necesita synchronized
+private volatile boolean alive = true; // simple read/write → volatile is sufficient
+private volatile Direction direction;  // but turn() is compound → needs synchronized
 ```
 
-### `wait()` y `notifyAll()`
+### `wait()` and `notifyAll()`
 
-Son métodos del objeto `Object` en Java (heredados por todos los objetos) que permiten coordinar hilos sobre un mismo monitor:
+These are methods of Java's `Object` class (inherited by all objects) that allow threads to coordinate on the same monitor:
 
-- **`wait()`**: el hilo que lo llama **libera el monitor** y se duerme. No consume CPU mientras espera. Solo puede llamarse dentro de un bloque `synchronized`.
-- **`notify()`**: despierta a **un** hilo aleatorio que esté en `wait()` sobre ese monitor.
-- **`notifyAll()`**: despierta a **todos** los hilos que estén en `wait()`. Se prefiere cuando hay múltiples hilos esperando la misma condición.
+- **`wait()`**: the calling thread **releases the monitor** and goes to sleep. It does not consume CPU while waiting. Can only be called inside a `synchronized` block.
+- **`notify()`**: wakes up **one** random thread that is in `wait()` on that monitor.
+- **`notifyAll()`**: wakes up **all** threads in `wait()`. Preferred when multiple threads are waiting for the same condition.
 
-El patrón correcto siempre usa `while` (no `if`) para evitar spurious wakeups:
+The correct pattern always uses `while` (not `if`) to guard against spurious wakeups:
 ```java
 synchronized void awaitUnpaused() throws InterruptedException {
-    while (paused) {   // while, no if
+    while (paused) {   // while, not if
         wait();
     }
 }
 ```
 
-### Espera activa (Busy-wait)
+### Busy-wait
 
-Es un antipatrón donde un hilo comprueba repetidamente una condición en un bucle sin ceder el control:
+An anti-pattern where a thread repeatedly checks a condition in a loop without yielding control:
 ```java
-// MAL: gasta CPU sin hacer nada útil
+// BAD: wastes CPU doing nothing useful
 while (paused) { } // busy-wait
 ```
-Consume el 100 % de un núcleo de CPU mientras espera. La solución correcta es usar `wait()` / `notifyAll()`, que suspenden el hilo sin gastar CPU.
+Consumes 100% of a CPU core while waiting. The correct solution is to use `wait()` / `notifyAll()`, which suspend the thread without wasting CPU.
 
 ### Deadlock
 
-Es una situación donde dos o más hilos se bloquean mutuamente esperando un recurso que el otro tiene, y ninguno puede continuar.
+A situation where two or more threads block each other waiting for a resource that the other holds, and neither can continue.
 
-**Ejemplo clásico:**
-- Hilo A tiene el lock 1 y espera el lock 2
-- Hilo B tiene el lock 2 y espera el lock 1
-→ Ninguno avanza jamás.
+**Classic example:**
+- Thread A holds lock 1 and waits for lock 2
+- Thread B holds lock 2 and waits for lock 1
+→ Neither ever makes progress.
 
-**Cómo se evita en este proyecto:** se establece un **orden fijo de adquisición de locks**: siempre `Board → Snake`. Nunca ocurre la situación inversa (`Snake → Board`), por lo que no puede formarse un ciclo de dependencia.
+**How it is avoided in this project:** a **fixed lock acquisition order** is established: always `Board → Snake`. The reverse (`Snake → Board`) never occurs, so no dependency cycle can form.
 
 ### EDT — Event Dispatch Thread
 
-En aplicaciones Swing, todas las operaciones de UI (pintar, responder a eventos del teclado/ratón) deben ejecutarse en un hilo especial llamado **EDT**. Si se modifica la UI desde otro hilo, el comportamiento es impredecible.
+In Swing applications, all UI operations (painting, responding to keyboard/mouse events) must run on a special thread called the **EDT**. Modifying the UI from another thread leads to unpredictable behavior.
 
-En este proyecto, el repaint se programa siempre desde el EDT usando:
+In this project, repainting is always scheduled from the EDT using:
 ```java
 SwingUtilities.invokeLater(gamePanel::repaint);
 ```
-Y los métodos de `Snake` que el EDT llama (`snapshot()`, `isAlive()`, etc.) son `synchronized` para que sean seguros al llamarse concurrentemente con los `SnakeRunner`.
+And the `Snake` methods called by the EDT (`snapshot()`, `isAlive()`, etc.) are `synchronized` to be safe when called concurrently with the `SnakeRunner` threads.
 
 ---
 
-## Análisis de concurrencia
+## Concurrency analysis
 
-### Bugs encontrados en el código original
+### Bugs found in the original code
 
-#### Bug 1 — Data race en `Snake.body` (ConcurrentModificationException)
+#### Bug 1 — Data race on `Snake.body` (ConcurrentModificationException)
 
-**Problema:** `body` era un `ArrayDeque` sin ninguna sincronización. Dos hilos accedían a él al mismo tiempo:
-- El `SnakeRunner` escribía a través de `advance()` (llamado desde `board.step()`)
-- El EDT de Swing leía a través de `snapshot()` en `paintComponent()`
+**Problem:** `body` was an `ArrayDeque` with no synchronization. Two threads accessed it simultaneously:
+- The `SnakeRunner` wrote to it via `advance()` (called from `board.step()`)
+- The Swing EDT read it via `snapshot()` in `paintComponent()`
 
-Un `ArrayDeque` no es thread-safe. Si un hilo modifica la colección mientras otro la itera, Java lanza `ConcurrentModificationException`. En el peor caso, puede leer datos corruptos sin excepción.
+An `ArrayDeque` is not thread-safe. If one thread modifies the collection while another iterates it, Java throws `ConcurrentModificationException`. In the worst case, corrupted data can be read without any exception.
 
-**Solución:** se agregó `synchronized` a todos los métodos que acceden a `body`:
+**Fix:** `synchronized` was added to all methods that access `body`:
 ```java
 public synchronized Position head()           { return body.peekFirst(); }
 public synchronized Deque<Position> snapshot() { return new ArrayDeque<>(body); }
 public synchronized void advance(...)          { ... }
 public synchronized boolean containsPosition() { return body.contains(p); }
 ```
-`snapshot()` devuelve una copia del cuerpo, así el EDT puede pintar sin mantener el lock durante todo el repaint.
+`snapshot()` returns a copy of the body so the EDT can paint without holding the lock during the entire repaint.
 
 ---
 
-#### Bug 2 — `turn()` no era atómica (data race en `direction`)
+#### Bug 2 — `turn()` was not atomic (data race on `direction`)
 
-**Problema:** `direction` era `volatile`, lo que garantiza visibilidad pero NO atomicidad en operaciones compuestas. `turn()` hacía un read-check-write:
+**Problem:** `direction` was `volatile`, which guarantees visibility but NOT atomicity for compound operations. `turn()` performed a read-check-write:
 ```java
-// No atómico con solo volatile:
-if (direction == Direction.UP && dir == Direction.DOWN) { return; } // LEE
-this.direction = dir;                                                // ESCRIBE
+// Not atomic with volatile alone:
+if (direction == Direction.UP && dir == Direction.DOWN) { return; } // READ
+this.direction = dir;                                                // WRITE
 ```
-El EDT (input del jugador) y el `SnakeRunner` (`randomTurn()`) podían llamar `turn()` al mismo tiempo. Un cambio de contexto entre la lectura y la escritura permitía que la serpiente girara en sentido opuesto, ignorando la validación anti-reversa.
+The EDT (player input) and the `SnakeRunner` (`randomTurn()`) could call `turn()` simultaneously. A context switch between the read and the write allowed the snake to turn in the opposite direction, bypassing the anti-reversal check.
 
-**Solución:** se sincronizó `turn()` sobre `this`:
+**Fix:** `turn()` was synchronized on `this`:
 ```java
 public synchronized void turn(Direction dir) { ... }
 ```
-Ahora el read-check-write completo es atómico.
+Now the entire read-check-write is atomic.
 
 ---
 
-#### Bug 3 — La pausa no suspendía los `SnakeRunner` (espera activa implícita)
+#### Bug 3 — Pause did not suspend the `SnakeRunner` threads (implicit busy-wait)
 
-**Problema:** `togglePause()` llamaba `clock.pause()`, que solo detenía el repaint de la pantalla. Los `SnakeRunner` corrían en virtual threads independientes con su propio `Thread.sleep(80)` y **nunca consultaban el estado de pausa**. Las serpientes seguían moviéndose aunque la pantalla estuviera congelada.
+**Problem:** `togglePause()` called `clock.pause()`, which only stopped the screen repaint. The `SnakeRunner` threads ran in independent virtual threads with their own `Thread.sleep(80)` and **never checked the pause state**. Snakes kept moving even though the screen was frozen.
 
-**Solución:** se creó `PauseBarrier` usando `wait()` / `notifyAll()` sobre un monitor propio:
+**Fix:** `PauseBarrier` was created using `wait()` / `notifyAll()` on its own monitor:
 ```java
 public synchronized void awaitUnpaused() throws InterruptedException {
     while (paused) {
-        wait(); // libera el monitor y suspende el hilo sin consumir CPU
+        wait(); // releases the monitor and suspends the thread without burning CPU
     }
 }
 ```
-Cada runner llama `barrier.awaitUnpaused()` al inicio de cada iteración. Al pausar, `barrier.pause()` pone `paused = true`; los runners terminan su `step()` actual y luego se bloquean con `wait()`. Al reanudar, `barrier.resume()` llama `notifyAll()` y todos los runners continúan.
+Each runner calls `barrier.awaitUnpaused()` at the start of each iteration. On pause, `barrier.pause()` sets `paused = true`; runners finish their current `step()` and then block with `wait()`. On resume, `barrier.resume()` calls `notifyAll()` and all runners continue.
 
-Se usa `while (paused)` en lugar de `if (paused)` para protegerse contra **spurious wakeups** (despertares falsos que Java permite por razones del sistema operativo).
+`while (paused)` is used instead of `if (paused)` to guard against **spurious wakeups** (false wake-ups that the JVM may emit for OS-level reasons).
 
-Se usa `notifyAll()` en lugar de `notify()` porque hay múltiples runners bloqueados; `notify()` solo despertaría uno aleatorio y los demás quedarían bloqueados indefinidamente.
-
----
-
-#### Bug 4 — Sin detección de muerte ni estadísticas
-
-**Problema:** las serpientes nunca morían (al chocar con un obstáculo simplemente rebotaban). No había forma de mostrar la serpiente más larga ni la primera en morir al pausar.
-
-**Solución:**
-- Se agregaron `alive`, `diedAt` y `peakLength` a `Snake`
-- Se implementó `kill()` con guarda `if (!alive) return` para evitar doble muerte
-- Se detecta **auto-colisión** en `Board.step()`: si la nueva cabeza entra en el propio cuerpo → muere
-- Se detecta **colisión cruzada**: si la nueva cabeza entra en el cuerpo de otra serpiente viva → muere
-- Al pausar, `updateStats()` muestra la serpiente viva más larga y la primera en morir
+`notifyAll()` is used instead of `notify()` because multiple runners may be blocked; `notify()` would only wake one at random, leaving the rest blocked indefinitely.
 
 ---
 
-### Regiones críticas y orden de bloqueo
+#### Bug 4 — No death detection or statistics
 
-El código usa dos monitores: el del `Board` y el de cada `Snake`.
+**Problem:** snakes never died (on obstacle collision they simply bounced). There was no way to display the longest snake or the first to die when pausing.
 
-| Monitor | Lo que protege |
+**Fix:**
+- `alive`, `diedAt` and `peakLength` were added to `Snake`
+- `kill()` was implemented with an `if (!alive) return` guard to prevent double-kill
+- **Self-collision** is detected in `Board.step()`: if the new head enters its own body → dies
+- **Cross-collision** is detected: if the new head enters another living snake's body → dies
+- On pause, `updateStats()` displays the longest living snake and the first to die
+
+---
+
+### Critical sections and lock ordering
+
+The code uses two monitors: the `Board` monitor and each `Snake` monitor.
+
+| Monitor | What it protects |
 |---|---|
-| `Board.this` | `mice`, `obstacles`, `turbo`, `teleports` (HashSet/HashMap no thread-safe) |
-| `Snake.this` | `body` (ArrayDeque no thread-safe), `direction`, `alive`, `peakLength` |
+| `Board.this` | `mice`, `obstacles`, `turbo`, `teleports` (non-thread-safe HashSet/HashMap) |
+| `Snake.this` | `body` (non-thread-safe ArrayDeque), `direction`, `alive`, `peakLength` |
 
-**Orden de adquisición siempre: `Board → Snake`.**
+**Acquisition order is always: `Board → Snake`.**
 
-Dentro de `board.step()` (que sostiene el lock de Board), se llaman métodos sincronizados de Snake. Desde el EDT, los métodos de Board y de Snake se llaman por separado (no anidados). Nunca existe el orden inverso `Snake → Board`, por lo tanto **no hay riesgo de deadlock**.
+Inside `board.step()` (which holds the Board lock), synchronized Snake methods are called. From the EDT, Board and Snake methods are called separately (not nested). The reverse order `Snake → Board` never occurs, therefore **there is no deadlock risk**.
 
 ---
 
-### Colecciones identificadas como no seguras
+### Collections identified as unsafe
 
-| Colección | Clase | Problema | Solución |
+| Collection | Class | Problem | Fix |
 |---|---|---|---|
-| `ArrayDeque body` | `Snake` | Escritura concurrente con lectura del EDT | `synchronized` en todos sus métodos de acceso |
-| `HashSet mice` | `Board` | Modificación concurrente entre runners | Ya estaba protegida por `synchronized step()` |
-| `HashSet obstacles` | `Board` | Ídem | Ídem |
-| `HashMap teleports` | `Board` | Ídem | Ídem |
+| `ArrayDeque body` | `Snake` | Concurrent write and EDT read | `synchronized` on all accessor methods |
+| `HashSet mice` | `Board` | Concurrent modification between runners | Already protected by `synchronized step()` |
+| `HashSet obstacles` | `Board` | Same | Same |
+| `HashMap teleports` | `Board` | Same | Same |
 
 ---
 
-## Créditos
+## Credits
 
-Base original construida por el **Ing. Javier Toquica** como ejercicio del curso ARSW.
+Original base built by **Eng. Javier Toquica** as an ARSW course exercise.

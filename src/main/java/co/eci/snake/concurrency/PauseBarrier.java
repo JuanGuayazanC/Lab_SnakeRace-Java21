@@ -1,61 +1,61 @@
 package co.eci.snake.concurrency;
 
 /**
- * Barrera de pausa basada en el patrón monitor de Java ({@code wait}/{@code notifyAll}).
+ * Pause barrier based on Java's monitor pattern ({@code wait}/{@code notifyAll}).
  *
- * <p>Permite suspender y reanudar de forma segura todos los {@link SnakeRunner}
- * sin incurrir en espera activa (busy-wait). El mecanismo funciona así:</p>
+ * <p>Allows all {@link SnakeRunner} threads to be safely suspended and
+ * resumed without busy-waiting. The mechanism works as follows:</p>
  * <ol>
- *   <li>Cada runner llama a {@link #awaitUnpaused()} al inicio de cada iteración.</li>
- *   <li>Si el juego está pausado, {@code wait()} libera el monitor y duerme el hilo
- *       sin consumir CPU.</li>
- *   <li>Al reanudar, {@link #resume()} llama {@code notifyAll()} y todos los runners
- *       se despiertan y continúan.</li>
+ *   <li>Each runner calls {@link #awaitUnpaused()} at the start of each iteration.</li>
+ *   <li>If the game is paused, {@code wait()} releases the monitor and puts
+ *       the thread to sleep without consuming CPU.</li>
+ *   <li>On resume, {@link #resume()} calls {@code notifyAll()} and all runners
+ *       wake up and continue.</li>
  * </ol>
  *
- * <p>La barrera inicia en estado <em>pausado</em> para que los runners arranquen
- * bloqueados hasta que el jugador presione "Iniciar".</p>
+ * <p>The barrier starts in <em>paused</em> state so that runners start blocked
+ * until the player presses "Start".</p>
  *
- * <p><b>Spurious wakeups:</b> el patrón usa {@code while (paused)} en lugar de
- * {@code if (paused)} para protegerse contra despertares falsos que la JVM
- * puede emitir por razones del sistema operativo.</p>
+ * <p><b>Spurious wakeups:</b> the pattern uses {@code while (paused)} instead of
+ * {@code if (paused)} to guard against false wake-ups that the JVM may emit
+ * for OS-level reasons.</p>
  *
  * @author Juan Sebastian Guayazan Edilberto
  */
 public final class PauseBarrier {
 
-  /** Estado de pausa; {@code true} = runners bloqueados. */
+  /** Pause state; {@code true} = runners blocked. */
   private boolean paused = true;
 
   /**
-   * Bloquea el hilo llamante mientras el juego esté en pausa.
+   * Blocks the calling thread while the game is paused.
    *
-   * <p>Debe llamarse al inicio de cada iteración del runner. Si el juego está
-   * corriendo, retorna inmediatamente. Si está pausado, el hilo se suspende con
-   * {@code wait()} hasta que alguien llame {@link #resume()}.</p>
+   * <p>Should be called at the start of each runner iteration. If the game is
+   * running, returns immediately. If paused, the thread suspends with
+   * {@code wait()} until someone calls {@link #resume()}.</p>
    *
-   * @throws InterruptedException si el hilo es interrumpido mientras espera
+   * @throws InterruptedException if the thread is interrupted while waiting
    */
   public synchronized void awaitUnpaused() throws InterruptedException {
     while (paused) {
-      wait(); // libera el monitor y suspende el hilo sin consumir CPU
+      wait(); // releases the monitor and suspends the thread without burning CPU
     }
   }
 
   /**
-   * Pausa el juego. Los runners terminarán su {@code step()} actual y luego
-   * quedarán bloqueados en {@link #awaitUnpaused()}.
+   * Pauses the game. Runners will finish their current {@code step()} and then
+   * block in {@link #awaitUnpaused()}.
    */
   public synchronized void pause() {
     paused = true;
   }
 
   /**
-   * Reanuda el juego. Despierta a todos los runners bloqueados con {@code notifyAll()}.
+   * Resumes the game. Wakes all blocked runners with {@code notifyAll()}.
    *
-   * <p>Se usa {@code notifyAll()} en lugar de {@code notify()} porque puede haber
-   * múltiples runners en {@code wait()}; {@code notify()} solo despertaría uno
-   * aleatorio, dejando los demás bloqueados indefinidamente.</p>
+   * <p>{@code notifyAll()} is used instead of {@code notify()} because multiple
+   * runners may be in {@code wait()}; {@code notify()} would only wake one at
+   * random, leaving the rest blocked indefinitely.</p>
    */
   public synchronized void resume() {
     paused = false;
@@ -63,9 +63,9 @@ public final class PauseBarrier {
   }
 
   /**
-   * Indica si el juego está actualmente pausado.
+   * Returns whether the game is currently paused.
    *
-   * @return {@code true} si está pausado
+   * @return {@code true} if paused
    */
   public synchronized boolean isPaused() {
     return paused;

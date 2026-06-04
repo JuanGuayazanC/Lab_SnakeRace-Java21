@@ -9,21 +9,21 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Tablero de juego. Contiene y gestiona todos los elementos del escenario:
- * ratones, obstáculos, ítems turbo y teletransportadores.
+ * Game board. Contains and manages all scenario elements:
+ * mice, obstacles, turbo items and teleporters.
  *
- * <h2>Seguridad en concurrencia</h2>
- * <p>Las colecciones internas ({@code mice}, {@code obstacles}, {@code turbo},
- * {@code teleports}) son {@link HashSet}/{@link HashMap} estándar, que no son
- * thread-safe. Todas las lecturas y escrituras sobre ellas ocurren dentro del
- * método {@link #step}, que está declarado {@code synchronized} sobre {@code this}.
- * Los getters públicos ({@link #mice()}, etc.) también son {@code synchronized}
- * y devuelven copias defensivas.</p>
+ * <h2>Thread safety</h2>
+ * <p>The internal collections ({@code mice}, {@code obstacles}, {@code turbo},
+ * {@code teleports}) are standard {@link HashSet}/{@link HashMap}, which are
+ * not thread-safe. All reads and writes on them occur inside {@link #step},
+ * which is declared {@code synchronized} on {@code this}.
+ * The public getters ({@link #mice()}, etc.) are also {@code synchronized}
+ * and return defensive copies.</p>
  *
- * <h2>Orden de bloqueo</h2>
- * <p>Dentro de {@link #step} se llaman métodos {@code synchronized} de {@link Snake}.
- * El orden de adquisición es siempre {@code Board → Snake}; nunca a la inversa,
- * por lo que no hay riesgo de deadlock.</p>
+ * <h2>Lock ordering</h2>
+ * <p>Inside {@link #step}, synchronized {@link Snake} methods are called.
+ * The acquisition order is always {@code Board → Snake}; never the reverse,
+ * so there is no deadlock risk.</p>
  *
  * @author Juan Sebastian Guayazan Edilberto
  */
@@ -38,30 +38,30 @@ public final class Board {
   private final Map<Position,Position> teleports = new HashMap<>();
 
   /**
-   * Resultado de un paso de movimiento calculado por {@link #step}.
+   * Result of a movement step computed by {@link #step}.
    */
   public enum MoveResult {
-    /** La serpiente se movió sin ningún evento especial. */
+    /** The snake moved with no special event. */
     MOVED,
-    /** La serpiente comió un ratón y creció. */
+    /** The snake ate a mouse and grew. */
     ATE_MOUSE,
-    /** La cabeza chocó con un obstáculo; el runner debe girar aleatoriamente. */
+    /** The head hit an obstacle; the runner should turn randomly. */
     HIT_OBSTACLE,
-    /** La serpiente pisó un ítem turbo; su velocidad se duplica temporalmente. */
+    /** The snake stepped on a turbo item; its speed doubles temporarily. */
     ATE_TURBO,
-    /** La serpiente entró en un teletransportador y salió por el portal par. */
+    /** The snake entered a teleporter and exited through the paired portal. */
     TELEPORTED,
-    /** La serpiente murió por auto-colisión o colisión cruzada. */
+    /** The snake died from self-collision or cross-collision. */
     DIED
   }
 
   /**
-   * Crea un tablero de las dimensiones indicadas e inicializa aleatoriamente
-   * ratones, obstáculos, ítems turbo y pares de teletransportadores.
+   * Creates a board with the given dimensions and randomly initializes
+   * mice, obstacles, turbo items and teleporter pairs.
    *
-   * @param width  ancho en celdas (debe ser &gt; 0)
-   * @param height alto  en celdas (debe ser &gt; 0)
-   * @throws IllegalArgumentException si alguna dimensión es ≤ 0
+   * @param width  width in cells (must be &gt; 0)
+   * @param height height in cells (must be &gt; 0)
+   * @throws IllegalArgumentException if any dimension is ≤ 0
    */
   public Board(int width, int height) {
     if (width <= 0 || height <= 0) throw new IllegalArgumentException("Board dimensions must be positive");
@@ -73,60 +73,60 @@ public final class Board {
     createTeleportPairs(2);
   }
 
-  /** @return ancho del tablero en celdas */
+  /** @return board width in cells */
   public int width()  { return width; }
 
-  /** @return alto del tablero en celdas */
+  /** @return board height in cells */
   public int height() { return height; }
 
   /**
-   * Devuelve una copia de las posiciones de los ratones.
+   * Returns a copy of the mouse positions.
    *
-   * @return conjunto de posiciones con ratones
+   * @return set of positions containing mice
    */
   public synchronized Set<Position> mice()      { return new HashSet<>(mice); }
 
   /**
-   * Devuelve una copia de las posiciones de los obstáculos.
+   * Returns a copy of the obstacle positions.
    *
-   * @return conjunto de posiciones con obstáculos
+   * @return set of positions containing obstacles
    */
   public synchronized Set<Position> obstacles() { return new HashSet<>(obstacles); }
 
   /**
-   * Devuelve una copia de las posiciones de los ítems turbo.
+   * Returns a copy of the turbo item positions.
    *
-   * @return conjunto de posiciones con turbo
+   * @return set of positions containing turbo items
    */
   public synchronized Set<Position> turbo()     { return new HashSet<>(turbo); }
 
   /**
-   * Devuelve una copia del mapa de teletransportadores.
+   * Returns a copy of the teleporter map.
    *
-   * @return mapa origen → destino de cada portal
+   * @return map from source to destination for each portal
    */
   public synchronized Map<Position,Position> teleports() { return new HashMap<>(teleports); }
 
   /**
-   * Calcula y aplica un paso de movimiento para {@code snake}.
+   * Computes and applies a movement step for {@code snake}.
    *
-   * <p>El método está sincronizado en {@code Board}, por lo que solo un
-   * {@code SnakeRunner} puede ejecutarlo a la vez. El orden de eventos es:</p>
+   * <p>The method is synchronized on {@code Board}, so only one
+   * {@code SnakeRunner} can execute it at a time. The event sequence is:</p>
    * <ol>
-   *   <li>Calcular la posición siguiente con wrap-around.</li>
-   *   <li>Verificar colisión con obstáculo → {@link MoveResult#HIT_OBSTACLE}.</li>
-   *   <li>Verificar auto-colisión → {@link MoveResult#DIED}.</li>
-   *   <li>Verificar colisión cruzada con otras serpientes → {@link MoveResult#DIED}.</li>
-   *   <li>Aplicar teletransporte si corresponde.</li>
-   *   <li>Consumir ratón o turbo si los hay.</li>
-   *   <li>Avanzar la serpiente con {@link Snake#advance}.</li>
-   *   <li>Reponer elementos consumidos aleatoriamente.</li>
+   *   <li>Compute the next position with wrap-around.</li>
+   *   <li>Check obstacle collision → {@link MoveResult#HIT_OBSTACLE}.</li>
+   *   <li>Check self-collision → {@link MoveResult#DIED}.</li>
+   *   <li>Check cross-collision with other snakes → {@link MoveResult#DIED}.</li>
+   *   <li>Apply teleport if applicable.</li>
+   *   <li>Consume mouse or turbo item if present.</li>
+   *   <li>Advance the snake with {@link Snake#advance}.</li>
+   *   <li>Randomly replenish consumed elements.</li>
    * </ol>
    *
-   * @param snake     serpiente que realiza el paso
-   * @param allSnakes lista completa de serpientes (para colisión cruzada)
-   * @return resultado del movimiento
-   * @throws NullPointerException si {@code snake} es {@code null}
+   * @param snake     snake performing the step
+   * @param allSnakes full list of snakes (for cross-collision detection)
+   * @return result of the movement
+   * @throws NullPointerException if {@code snake} is {@code null}
    */
   public synchronized MoveResult step(Snake snake, List<Snake> allSnakes) {
     Objects.requireNonNull(snake, "snake");
@@ -136,16 +136,16 @@ public final class Board {
 
     if (obstacles.contains(next)) return MoveResult.HIT_OBSTACLE;
 
-    // Auto-colisión: la cabeza entra en el propio cuerpo.
+    // Self-collision: the head enters its own body.
     if (snake.containsPosition(next)) {
       snake.kill();
       return MoveResult.DIED;
     }
 
-    // Colisión cruzada: la cabeza entra en el cuerpo de otra serpiente viva.
-    // board.step() es synchronized en Board → solo un runner a la vez puede
-    // estar aquí, así que adquirir varios monitores de Snake es seguro (no hay
-    // dos hilos compitiendo por ellos simultáneamente desde dentro de step()).
+    // Cross-collision: the head enters the body of another living snake.
+    // board.step() is synchronized on Board → only one runner at a time can
+    // be here, so acquiring multiple Snake monitors is safe (no two threads
+    // compete for them simultaneously from inside step()).
     for (Snake other : allSnakes) {
       if (other != snake && other.isAlive() && other.containsPosition(next)) {
         snake.kill();
@@ -177,9 +177,9 @@ public final class Board {
   }
 
   /**
-   * Crea {@code pairs} pares de portales de teletransporte en posiciones aleatorias.
+   * Creates {@code pairs} teleporter pairs at random empty positions.
    *
-   * @param pairs número de pares a crear
+   * @param pairs number of pairs to create
    */
   private void createTeleportPairs(int pairs) {
     for (int i = 0; i < pairs; i++) {
@@ -191,11 +191,10 @@ public final class Board {
   }
 
   /**
-   * Elige una posición aleatoria del tablero que no esté ocupada por ningún
-   * elemento existente. Incluye un contador de seguridad para evitar bucles
-   * infinitos en tableros muy llenos.
+   * Picks a random board position that is not occupied by any existing element.
+   * Includes a safety counter to avoid infinite loops on very full boards.
    *
-   * @return posición libre aleatoria
+   * @return a random empty position
    */
   private Position randomEmpty() {
     var rnd = ThreadLocalRandom.current();

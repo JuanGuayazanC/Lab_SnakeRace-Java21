@@ -1,25 +1,25 @@
 package co.eci.snake.core;
 
 /**
- * Estados posibles del juego.
+ * Possible states of the game.
  *
  * <ul>
- *   <li>{@link #STOPPED}  – el juego no ha arrancado todavía.</li>
- *   <li>{@link #RUNNING}  – los runners están activos y la pantalla se repinta.</li>
- *   <li>{@link #PAUSED}   – los runners están bloqueados en {@code PauseBarrier}
- *       y el repaint está detenido.</li>
+ *   <li>{@link #STOPPED} – the game has not started yet.</li>
+ *   <li>{@link #RUNNING} – runners are active and the screen is being repainted.</li>
+ *   <li>{@link #PAUSED}  – runners are blocked in {@code PauseBarrier}
+ *       and the repaint is stopped.</li>
  * </ul>
  *
  * @author Juan Sebastian Guayazan Edilberto
  */
 public enum GameState {
 
-  /** Estado inicial; ningún runner ha sido desbloqueado aún. */
+  /** Initial state; no runner has been unblocked yet. */
   STOPPED,
 
-  /** Juego en marcha; serpientes moviéndose y pantalla actualizándose. */
+  /** Game in progress; snakes moving and screen updating. */
   RUNNING,
 
-  /** Juego suspendido; runners bloqueados con {@code wait()}, sin consumir CPU. */
+  /** Game suspended; runners blocked with {@code wait()}, not consuming CPU. */
   PAUSED
 }

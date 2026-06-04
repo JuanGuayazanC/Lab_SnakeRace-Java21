@@ -3,10 +3,10 @@ package co.eci.snake.app;
 import co.eci.snake.ui.legacy.SnakeApp;
 
 /**
- * Punto de entrada de la aplicación Snake Race.
+ * Application entry point for Snake Race.
  *
- * <p>Delega el arranque a {@link SnakeApp#launch()}, que crea la ventana
- * Swing en el Event Dispatch Thread (EDT).</p>
+ * <p>Delegates startup to {@link SnakeApp#launch()}, which creates the
+ * Swing window on the Event Dispatch Thread (EDT).</p>
  *
  * @author Juan Sebastian Guayazan Edilberto
  */
@@ -15,11 +15,11 @@ public final class Main {
   private Main() {}
 
   /**
-   * Método principal. Lanza la interfaz gráfica del juego.
+   * Main method. Launches the game's graphical interface.
    *
-   * @param args argumentos de línea de comandos (no utilizados directamente;
-   *             usar la propiedad del sistema {@code -Dsnakes=N} para definir
-   *             el número de serpientes)
+   * @param args command-line arguments (not used directly;
+   *             use the system property {@code -Dsnakes=N} to set
+   *             the number of snakes)
    */
   public static void main(String[] args) {
     SnakeApp.launch();

@@ -4,48 +4,48 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
- * Representa una serpiente en el tablero.
+ * Represents a snake on the board.
  *
- * <p>El cuerpo se almacena como un {@link ArrayDeque} donde el primer elemento
- * es la cabeza y el último es la cola. Todos los métodos que acceden al cuerpo
- * o al estado de vida están sincronizados sobre {@code this} para evitar
- * condiciones de carrera entre:</p>
+ * <p>The body is stored as an {@link ArrayDeque} where the first element
+ * is the head and the last is the tail. All methods that access the body
+ * or the life state are synchronized on {@code this} to prevent race
+ * conditions between:</p>
  * <ul>
- *   <li>El {@code SnakeRunner} (escribe vía {@link #advance} y {@link #kill})</li>
- *   <li>El EDT de Swing (lee vía {@link #snapshot} para pintar)</li>
- *   <li>{@code Board.step()} (lee {@link #head} y {@link #direction},
- *       escribe {@link #advance})</li>
+ *   <li>The {@code SnakeRunner} (writes via {@link #advance} and {@link #kill})</li>
+ *   <li>The Swing EDT (reads via {@link #snapshot} to paint)</li>
+ *   <li>{@code Board.step()} (reads {@link #head} and {@link #direction},
+ *       writes {@link #advance})</li>
  * </ul>
  *
- * <p><b>Orden de bloqueo:</b> siempre {@code Board → Snake}. Nunca a la
- * inversa, por lo que no hay riesgo de deadlock.</p>
+ * <p><b>Lock ordering:</b> always {@code Board → Snake}. Never the reverse,
+ * so there is no deadlock risk.</p>
  *
  * @author Juan Sebastian Guayazan Edilberto
  */
 public final class Snake {
 
   /**
-   * Cuerpo de la serpiente. No es thread-safe por sí solo; todos los accesos
-   * deben realizarse dentro de un bloque {@code synchronized(this)}.
+   * Snake body. Not thread-safe on its own; all accesses must be performed
+   * inside a {@code synchronized(this)} block.
    */
   private final Deque<Position> body = new ArrayDeque<>();
 
-  /** Dirección actual. {@code volatile} garantiza visibilidad entre hilos. */
+  /** Current direction. {@code volatile} guarantees visibility across threads. */
   private volatile Direction direction;
 
-  /** Longitud máxima permitida del cuerpo; crece al comer ratones. */
+  /** Maximum allowed body length; grows when mice are eaten. */
   private int maxLength = 5;
 
-  /** {@code true} mientras la serpiente esté viva. */
+  /** {@code true} while the snake is alive. */
   private volatile boolean alive = true;
 
   /**
-   * Marca de tiempo ({@link System#nanoTime()}) del momento de muerte.
-   * Valor {@code -1} mientras la serpiente esté viva.
+   * Timestamp ({@link System#nanoTime()}) of the moment of death.
+   * Value {@code -1} while the snake is alive.
    */
   private volatile long diedAt = -1;
 
-  /** Mayor longitud de cuerpo alcanzada durante la partida. */
+  /** Greatest body length reached during the game. */
   private int peakLength = 1;
 
   private Snake(Position start, Direction dir) {
@@ -54,34 +54,34 @@ public final class Snake {
   }
 
   /**
-   * Crea una serpiente en la posición y dirección indicadas.
+   * Creates a snake at the given position and direction.
    *
-   * @param x   columna inicial
-   * @param y   fila inicial
-   * @param dir dirección inicial de movimiento
-   * @return nueva instancia de {@code Snake}
+   * @param x   starting column
+   * @param y   starting row
+   * @param dir initial movement direction
+   * @return new {@code Snake} instance
    */
   public static Snake of(int x, int y, Direction dir) {
     return new Snake(new Position(x, y), dir);
   }
 
   /**
-   * Devuelve la dirección actual de movimiento.
+   * Returns the current movement direction.
    *
-   * @return dirección actual
+   * @return current direction
    */
   public synchronized Direction direction() { return direction; }
 
   /**
-   * Cambia la dirección de la serpiente si el giro es válido.
+   * Changes the snake's direction if the turn is valid.
    *
-   * <p>Se rechaza cualquier giro de 180° (dirección opuesta a la actual)
-   * para evitar que la serpiente se mueva contra sí misma. El método está
-   * sincronizado para que el input del jugador (EDT) y el giro aleatorio
-   * del {@code SnakeRunner} no generen una condición de carrera en la
-   * operación read-check-write sobre {@code direction}.</p>
+   * <p>Any 180° turn (opposite to the current direction) is rejected
+   * to prevent the snake from moving into itself. The method is
+   * synchronized so that player input (EDT) and the random turn from
+   * {@code SnakeRunner} do not create a race condition on the
+   * read-check-write over {@code direction}.</p>
    *
-   * @param dir nueva dirección deseada
+   * @param dir desired new direction
    */
   public synchronized void turn(Direction dir) {
     if (!alive) return;
@@ -95,31 +95,32 @@ public final class Snake {
   }
 
   /**
-   * Devuelve la posición actual de la cabeza.
+   * Returns the current position of the head.
    *
-   * @return posición de la cabeza
+   * @return head position
    */
   public synchronized Position head() { return body.peekFirst(); }
 
   /**
-   * Devuelve una copia instantánea del cuerpo para uso externo (p. ej. renderizado).
+   * Returns an instant snapshot of the body for external use (e.g. rendering).
    *
-   * <p>La copia se realiza mientras se sostiene el monitor, garantizando
-   * un snapshot consistente. El llamador puede iterar la copia libremente
-   * sin riesgo de {@link java.util.ConcurrentModificationException}.</p>
+   * <p>The copy is made while holding the monitor, guaranteeing a consistent
+   * snapshot. The caller can iterate the copy freely without risk of
+   * {@link java.util.ConcurrentModificationException}.</p>
    *
-   * @return copia del deque de posiciones (cabeza en el primer elemento)
+   * @return copy of the position deque (head at the first element)
    */
   public synchronized Deque<Position> snapshot() { return new ArrayDeque<>(body); }
 
   /**
-   * Avanza la serpiente añadiendo {@code newHead} como nueva cabeza.
+   * Advances the snake by adding {@code newHead} as the new head.
    *
-   * <p>Si {@code grow} es {@code true}, incrementa la longitud máxima (la serpiente
-   * comió un ratón). Se elimina la cola si el cuerpo supera {@code maxLength}.</p>
+   * <p>If {@code grow} is {@code true}, the maximum length is incremented
+   * (the snake ate a mouse). The tail is removed if the body exceeds
+   * {@code maxLength}.</p>
    *
-   * @param newHead posición a la que se mueve la cabeza
-   * @param grow    {@code true} si la serpiente debe crecer
+   * @param newHead position to which the head moves
+   * @param grow    {@code true} if the snake should grow
    */
   public synchronized void advance(Position newHead, boolean grow) {
     body.addFirst(newHead);
@@ -129,24 +130,24 @@ public final class Snake {
   }
 
   /**
-   * Comprueba si la posición {@code p} está ocupada por algún segmento del cuerpo.
+   * Checks whether position {@code p} is occupied by any body segment.
    *
-   * <p>Llamado desde {@code Board.step()} mientras se sostiene el monitor de
-   * {@code Board}, de modo que el orden de bloqueo es siempre
-   * {@code Board → Snake}, sin riesgo de deadlock.</p>
+   * <p>Called from {@code Board.step()} while holding the {@code Board}
+   * monitor, so the lock ordering is always {@code Board → Snake},
+   * with no deadlock risk.</p>
    *
-   * @param p posición a verificar
-   * @return {@code true} si {@code p} coincide con algún segmento del cuerpo
+   * @param p position to check
+   * @return {@code true} if {@code p} matches any body segment
    */
   public synchronized boolean containsPosition(Position p) {
     return body.contains(p);
   }
 
   /**
-   * Marca la serpiente como muerta registrando el instante de muerte.
+   * Marks the snake as dead, recording the time of death.
    *
-   * <p>La guarda {@code if (!alive) return} evita que dos hilos que detecten
-   * la misma colisión simultáneamente ejecuten la muerte dos veces.</p>
+   * <p>The guard {@code if (!alive) return} prevents two threads that detect
+   * the same collision simultaneously from killing the snake twice.</p>
    */
   public synchronized void kill() {
     if (!alive) return;
@@ -155,30 +156,30 @@ public final class Snake {
   }
 
   /**
-   * Indica si la serpiente sigue viva.
+   * Returns whether the snake is still alive.
    *
-   * @return {@code true} si está viva
+   * @return {@code true} if alive
    */
   public boolean isAlive() { return alive; }
 
   /**
-   * Devuelve el instante de muerte en nanosegundos ({@link System#nanoTime()}).
+   * Returns the time of death in nanoseconds ({@link System#nanoTime()}).
    *
-   * @return instante de muerte, o {@code -1} si aún está viva
+   * @return time of death, or {@code -1} if still alive
    */
   public long diedAt() { return diedAt; }
 
   /**
-   * Devuelve la longitud máxima del cuerpo alcanzada durante la partida.
+   * Returns the greatest body length reached during the game.
    *
-   * @return longitud máxima histórica en segmentos
+   * @return peak length in segments
    */
   public synchronized int peakLength()    { return peakLength; }
 
   /**
-   * Devuelve la longitud actual del cuerpo.
+   * Returns the current body length.
    *
-   * @return número de segmentos actuales
+   * @return current number of segments
    */
   public synchronized int currentLength() { return body.size(); }
 }

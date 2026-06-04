@@ -17,50 +17,50 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 
 /**
- * Ventana principal del juego Snake Race.
+ * Main window of the Snake Race game.
  *
- * <h2>Estados del botón de acción</h2>
+ * <h2>Button state machine</h2>
  * <pre>
- *   "Iniciar"  →  "Pausar"  →  "Reanudar"  →  "Pausar"  → ...
- *   (STOPPED)     (RUNNING)    (PAUSED)        (RUNNING)
+ *   "Start"  →  "Pause"  →  "Resume"  →  "Pause"  → ...
+ *   (STOPPED)   (RUNNING)   (PAUSED)      (RUNNING)
  * </pre>
  *
- * <h2>Responsabilidades de concurrencia</h2>
+ * <h2>Concurrency responsibilities</h2>
  * <ul>
- *   <li>{@link GameClock} controla únicamente el repaint (cada 60 ms).</li>
- *   <li>{@link PauseBarrier} suspende y reanuda los {@link SnakeRunner}
- *       mediante {@code wait()}/{@code notifyAll()}, sin busy-wait.</li>
- *   <li>Toda manipulación de la UI ocurre en el EDT de Swing.</li>
+ *   <li>{@link GameClock} controls only the repaint (every 60 ms).</li>
+ *   <li>{@link PauseBarrier} suspends and resumes the {@link SnakeRunner}
+ *       threads via {@code wait()}/{@code notifyAll()}, without busy-wait.</li>
+ *   <li>All UI manipulation happens on the Swing EDT.</li>
  * </ul>
  *
  * @author Juan Sebastian Guayazan Edilberto
  */
 public final class SnakeApp extends JFrame {
 
-  private final Board    board;
+  private final Board     board;
   private final GamePanel gamePanel;
-  private final JButton  actionButton;
+  private final JButton   actionButton;
 
-  /** Etiqueta que muestra estadísticas cuando el juego está pausado. */
+  /** Label that shows statistics when the game is paused. */
   private final JLabel statsLabel;
 
   private final GameClock clock;
 
   /**
-   * Lista de serpientes activas. Se llena en el constructor y no se modifica
-   * posteriormente, por lo que no requiere sincronización adicional.
+   * List of active snakes. Populated in the constructor and never modified
+   * afterwards, so no additional synchronization is needed.
    */
   private final java.util.List<Snake> snakes = new java.util.ArrayList<>();
 
-  /** Barrera compartida entre la UI y todos los {@link SnakeRunner}. */
+  /** Barrier shared between the UI and all {@link SnakeRunner} threads. */
   private final PauseBarrier barrier = new PauseBarrier();
 
   /**
-   * Construye la ventana, inicializa el tablero y lanza los runners.
+   * Builds the window, initializes the board and launches the runners.
    *
-   * <p>Los runners arrancan inmediatamente pero quedan bloqueados en
-   * {@link PauseBarrier#awaitUnpaused()} hasta que el jugador presione "Iniciar".
-   * El {@link GameClock} tampoco se inicia aquí; se inicia en {@link #togglePause()}.</p>
+   * <p>Runners start immediately but block in {@link PauseBarrier#awaitUnpaused()}
+   * until the player presses "Start". The {@link GameClock} is also not started
+   * here; it starts in {@link #togglePause()}.</p>
    */
   public SnakeApp() {
     super("The Snake Race");
@@ -75,7 +75,7 @@ public final class SnakeApp extends JFrame {
     }
 
     this.gamePanel    = new GamePanel(board, () -> snakes);
-    this.actionButton = new JButton("Iniciar");
+    this.actionButton = new JButton("Start");
     this.statsLabel   = new JLabel(" ");
     statsLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
@@ -145,45 +145,45 @@ public final class SnakeApp extends JFrame {
     }
 
     setVisible(true);
-    // clock.start() NO va aquí: el juego arranca al presionar "Iniciar"
+    // clock.start() is NOT called here: the game starts when "Start" is pressed
   }
 
   /**
-   * Maneja la transición de estados del botón de acción.
+   * Handles the action button state transitions.
    *
    * <ul>
-   *   <li><b>Iniciar:</b> desbloquea todos los runners y arranca el reloj.</li>
-   *   <li><b>Pausar:</b> bloquea runners con {@code wait()}, detiene el repaint
-   *       y muestra estadísticas.</li>
-   *   <li><b>Reanudar:</b> desbloquea runners con {@code notifyAll()} y reanuda
-   *       el repaint.</li>
+   *   <li><b>Start:</b> unblocks all runners and starts the clock.</li>
+   *   <li><b>Pause:</b> blocks runners with {@code wait()}, stops the repaint
+   *       and shows statistics.</li>
+   *   <li><b>Resume:</b> unblocks runners with {@code notifyAll()} and resumes
+   *       the repaint.</li>
    * </ul>
    */
   private void togglePause() {
-    if ("Iniciar".equals(actionButton.getText())) {
+    if ("Start".equals(actionButton.getText())) {
       barrier.resume();
       clock.start();
-      actionButton.setText("Pausar");
+      actionButton.setText("Pause");
       statsLabel.setText(" ");
-    } else if ("Pausar".equals(actionButton.getText())) {
+    } else if ("Pause".equals(actionButton.getText())) {
       barrier.pause();
       clock.pause();
       updateStats();
-      actionButton.setText("Reanudar");
+      actionButton.setText("Resume");
     } else {
       statsLabel.setText(" ");
       barrier.resume();
       clock.resume();
-      actionButton.setText("Pausar");
+      actionButton.setText("Pause");
     }
   }
 
   /**
-   * Calcula y muestra las estadísticas del juego al pausar.
+   * Computes and displays game statistics when pausing.
    *
-   * <p>Lee {@link Snake#currentLength()}, {@link Snake#isAlive()} y
-   * {@link Snake#diedAt()} — todos sincronizados — garantizando una
-   * lectura consistente aunque algún runner no haya bloqueado todavía.</p>
+   * <p>Reads {@link Snake#currentLength()}, {@link Snake#isAlive()} and
+   * {@link Snake#diedAt()} — all synchronized — guaranteeing a consistent
+   * read even if some runner has not blocked yet.</p>
    */
   private void updateStats() {
     Snake longestAlive = snakes.stream()
@@ -196,47 +196,47 @@ public final class SnakeApp extends JFrame {
         .min(Comparator.comparingLong(Snake::diedAt))
         .orElse(null);
 
-    StringBuilder sb = new StringBuilder("[ PAUSADO ]  ");
+    StringBuilder sb = new StringBuilder("[ PAUSED ]  ");
     if (longestAlive != null) {
-      sb.append("Más larga viva: Serpiente #")
+      sb.append("Longest alive: Snake #")
         .append(snakes.indexOf(longestAlive))
-        .append(" (").append(longestAlive.currentLength()).append(" seg)");
+        .append(" (").append(longestAlive.currentLength()).append(" segments)");
     } else {
-      sb.append("Ninguna serpiente viva");
+      sb.append("No snakes alive");
     }
     sb.append("   |   ");
     if (firstDead != null) {
-      sb.append("Primera en morir: Serpiente #")
+      sb.append("First to die: Snake #")
         .append(snakes.indexOf(firstDead))
-        .append(" (max ").append(firstDead.peakLength()).append(" seg)");
+        .append(" (peak ").append(firstDead.peakLength()).append(" segments)");
     } else {
-      sb.append("Ninguna ha muerto aún");
+      sb.append("None have died yet");
     }
     statsLabel.setText(sb.toString());
   }
 
   // ---------------------------------------------------------------------------
-  // Panel de juego
+  // Game panel
   // ---------------------------------------------------------------------------
 
   /**
-   * Panel Swing que renderiza el estado del tablero y las serpientes.
+   * Swing panel that renders the board state and the snakes.
    *
-   * <p>Se repinta cada 60 ms desde el EDT a petición del {@link GameClock}.
-   * Todas las lecturas de estado se realizan mediante métodos sincronizados
-   * de {@link Board} y {@link Snake}, por lo que el renderizado es thread-safe.</p>
+   * <p>Repainted every 60 ms from the EDT at the request of {@link GameClock}.
+   * All state reads are performed via synchronized methods of {@link Board}
+   * and {@link Snake}, so rendering is thread-safe.</p>
    */
   public static final class GamePanel extends JPanel {
 
     private final Board    board;
     private final Supplier snakesSupplier;
 
-    /** Tamaño en píxeles de cada celda del tablero. */
+    /** Size in pixels of each board cell. */
     private final int cell = 20;
 
     /**
-     * Proveedor funcional de la lista de serpientes.
-     * Permite al panel acceder a la lista sin acoplarse directamente a ella.
+     * Functional supplier of the snake list.
+     * Allows the panel to access the list without being directly coupled to it.
      */
     @FunctionalInterface
     public interface Supplier {
@@ -244,10 +244,10 @@ public final class SnakeApp extends JFrame {
     }
 
     /**
-     * Crea el panel de juego.
+     * Creates the game panel.
      *
-     * @param board          tablero del que se leen los elementos a dibujar
-     * @param snakesSupplier proveedor de la lista de serpientes
+     * @param board          board from which elements are read for drawing
+     * @param snakesSupplier provider of the snake list
      */
     public GamePanel(Board board, Supplier snakesSupplier) {
       this.board          = board;
@@ -257,12 +257,12 @@ public final class SnakeApp extends JFrame {
     }
 
     /**
-     * Dibuja el tablero completo: grilla, obstáculos, ratones, teleports,
-     * ítems turbo y serpientes vivas.
+     * Draws the full board: grid, obstacles, mice, teleports,
+     * turbo items and living snakes.
      *
-     * <p>Las serpientes muertas no se dibujan (desaparecen del tablero).</p>
+     * <p>Dead snakes are not drawn (they disappear from the board).</p>
      *
-     * @param g contexto gráfico proporcionado por Swing
+     * @param g graphics context provided by Swing
      */
     @Override
     protected void paintComponent(Graphics g) {
@@ -270,14 +270,14 @@ public final class SnakeApp extends JFrame {
       var g2 = (Graphics2D) g.create();
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-      // Grilla
+      // Grid
       g2.setColor(new Color(220, 220, 220));
       for (int x = 0; x <= board.width();  x++)
         g2.drawLine(x * cell, 0, x * cell, board.height() * cell);
       for (int y = 0; y <= board.height(); y++)
         g2.drawLine(0, y * cell, board.width() * cell, y * cell);
 
-      // Obstáculos
+      // Obstacles
       g2.setColor(new Color(255, 102, 0));
       for (var p : board.obstacles()) {
         int x = p.x() * cell, y = p.y() * cell;
@@ -289,7 +289,7 @@ public final class SnakeApp extends JFrame {
         g2.setColor(new Color(255, 102, 0));
       }
 
-      // Ratones
+      // Mice
       g2.setColor(Color.BLACK);
       for (var p : board.mice()) {
         int x = p.x() * cell, y = p.y() * cell;
@@ -299,7 +299,7 @@ public final class SnakeApp extends JFrame {
         g2.setColor(Color.BLACK);
       }
 
-      // Teletransportadores
+      // Teleporters
       Map<Position,Position> tp = board.teleports();
       g2.setColor(Color.RED);
       for (var entry : tp.entrySet()) {
@@ -310,7 +310,7 @@ public final class SnakeApp extends JFrame {
         g2.fillPolygon(xs, ys, xs.length);
       }
 
-      // Ítems turbo
+      // Turbo items
       g2.setColor(Color.BLACK);
       for (var p : board.turbo()) {
         int x = p.x() * cell, y = p.y() * cell;
@@ -319,7 +319,7 @@ public final class SnakeApp extends JFrame {
         g2.fillPolygon(xs, ys, xs.length);
       }
 
-      // Serpientes (solo las vivas)
+      // Snakes (living only)
       var snakes = snakesSupplier.get();
       int idx = 0;
       for (Snake s : snakes) {
@@ -342,8 +342,8 @@ public final class SnakeApp extends JFrame {
   }
 
   /**
-   * Crea y muestra la ventana en el Event Dispatch Thread (EDT).
-   * Debe llamarse desde el hilo principal ({@code main}).
+   * Creates and shows the window on the Event Dispatch Thread (EDT).
+   * Must be called from the main thread ({@code main}).
    */
   public static void launch() {
     SwingUtilities.invokeLater(SnakeApp::new);
