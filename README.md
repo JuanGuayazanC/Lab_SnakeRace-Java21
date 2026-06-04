@@ -302,25 +302,6 @@ Dentro de `board.step()` (que sostiene el lock de Board), se llaman métodos sin
 
 ---
 
-## Capturas del juego
-
-> *(Agregar screenshots o GIFs aquí)*
-
-**Estado inicial — esperando "Iniciar":**
-
-![Estado inicial](docs/screenshot-inicio.png)
-
-**Juego en ejecución con 20 serpientes:**
-
-![20 serpientes](docs/screenshot-20snakes.png)
-
-**Estadísticas al pausar:**
-
-![Pausado con stats](docs/screenshot-pausa.png)
-
----
-
 ## Créditos
 
 Base original construida por el **Ing. Javier Toquica** como ejercicio del curso ARSW.
-Solución de concurrencia implementada por **Juan Sebastian Guayazan Edilberto**.
